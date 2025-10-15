@@ -1,0 +1,148 @@
+#!/usr/bin/with-contenv bash
+
+сreate_catalog_for_variable() {
+  
+  local value=${!1}
+
+  if [ -z "$value" ]; then
+    echo "Не установлена переменная: $1" >&2
+    exit 1
+  fi
+
+  if [ ! -d "$value" ]; then
+    mkdir -p "$value" || {
+        echo "Ошибка создания каталога: $value" >&2
+        exit 1
+    }
+    
+  fi
+
+}
+
+addpath () {
+  x="$1"
+  IFS=:
+  set -- $PATH
+  IFS=
+  while test "$#" -gt 0 ; do
+    if test "$1" = "$x" ; then
+      return
+    fi
+    shift
+  done
+  PATH="${x}:$PATH"
+}
+
+echo "**** CATALOGS CREATION FOR TESTING ****"
+
+сreate_catalog_for_variable "EDT_PATH_WORKSPACE"
+сreate_catalog_for_variable "CI_PROJECT_DIR"
+сreate_catalog_for_variable "PROJECT_BULD_DIR"
+сreate_catalog_for_variable "PROJECT_LOG_DIR"
+сreate_catalog_for_variable "DB_PATH"
+
+# Подключение библиотек сборок
+
+echo "**** SETTINGS OF THE ENVIRONMENT ****"
+
+export _1C_HOME=$(dirname "$(find "/opt/1cv8/" -name "1cv8" -type f)")
+export RING_HOME=$(dirname "$(find "/opt/1C/1CE/components" -name "ring" -type f)")
+export JAVA_HOME=$(dirname "$(find "/opt/1C/1CE/components" -name "java" -type f)")
+export EDT_HOME=$(dirname "$(find "/opt/1C/1CE/components" -name "1cedtcli" -type f)")
+export PATH=${PATH}:${JAVA_HOME}:${RING_HOME}:${EDT_HOME}:${_1C_HOME}
+
+sed -i "s/^\(-Xmx\).*$/\1${EDT_MEMORY_LIMIT}/" "$EDT_HOME/1cedt.ini"
+
+ln "${_1C_HOME}/1cv8" /config/.local/bin/1cv8
+ln "${RING_HOME}/ring" /config/.local/bin/ring
+ln "${JAVA_HOME}/ring" /config/.local/bin/java
+ln "${JAVA_HOME}/ring" /config/.local/bin/1cedtcli
+ln "${JAVA_HOME}/ring" /config/.local/bin/1cedt
+
+addpath ${_1C_HOME}
+addpath ${RING_HOME}
+addpath ${JAVA_HOME}
+addpath ${EDT_HOME}
+
+# Определение ALIAS
+# Максимальное время выполнения в секундах
+if [[ -n ${EDT_MAXTIMEOUT} ]] ; then
+    alias_str+=("-timeout ${EDT_MAXTIMEOUT}")
+fi
+
+if [[ -n ${EDT_VMARGS} ]] ; then
+    alias_str+=("-vmargs ${EDT_VMARGS}")
+fi
+alias_str=("1cedtcli")
+if [[ -n ${EDT_PATH_WORKSPACE} ]] ; then
+    alias_str+=("-data ${EDT_PATH_WORKSPACE}")
+else
+    echo "Не задан путь для переменной \${EDT_PATH_WORKSPACE}. Операция прервана"
+    exit 1
+fi
+
+IFS=' ' # разделитель
+alias cliedt='${alias_str[*]}'
+
+cat <<EOF >> /etc/bash.bashrc
+
+  # Глобальные переменные
+  export _1C_HOME="${_1C_HOME}"
+  export EDT_HOME="${EDT_HOME}"
+  export JAVA_HOME="${JAVA_HOME}"
+  export RING_HOME="${RING_HOME}"
+  export PATH=${PATH}
+
+  path_sripts=/config/.local/bin
+  if [ -d \$path_sripts ]; then
+    for i in "\${path_sripts}"/*.sh; do
+      chmod +x "\$i"
+      if [ -x "\$i" ] && [ ""\$i"" != *"test_"* ]; then
+        . "\$i"
+      fi
+    done
+    unset i
+  fi
+
+  IFS=' ' # разделитель
+  alias cliedt='${alias_str[*]}'
+
+EOF
+
+echo "SET ENVIRONMENT VARIABLES: 
+_1C_HOME=${_1C_HOME}
+EDT_HOME=${EDT_HOME}
+JAVA_HOME=${JAVA_HOME}
+RING_HOME=${RING_HOME}
+PATH=${PATH}
+"
+
+path_for_file=$(ind "/opt/1C/1CE/components" -name "*icon.xpm" -type f | grep -E '1c-edt-[0-9]{4}\.')
+
+# Добавление ярлыков на рабочий чтолпрограмм в меню
+cat <<EOF > /usr/share/applications/1cedt.desktop
+  [Desktop Entry]
+  Name=1C:EDT
+  Comment=Среда разработки на языке 1С
+  Exec=1cedt
+  Terminal=false
+  Type=Application
+  Icon=$path_for_file
+  Categories=GNOME;GTK;Development;
+  StartupNotify=true
+  Actions=new-window;new-private-window;
+EOF
+
+cat <<EOF > /usr/share/applications/1c.desktop
+  [Desktop Entry]
+  Name=1C:Предприятие
+  Comment=Среда разработки на языке 1С
+  Exec=1cv8
+  Terminal=false
+  Type=Application
+  Icon=$path_for_file
+  Categories=GNOME;GTK;Development;
+  StartupNotify=true
+  Actions=new-window;new-private-window;
+
+EOF

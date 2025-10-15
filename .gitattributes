@@ -1,0 +1,35 @@
+# Окончания файлов
+
+* text=auto
+renames.txt text eol=crlf
+*.htm text eol=crlf
+*.html text eol=crlf
+*.feature text
+*.md text
+*.json text
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.os text eol=crlf
+*.sh text eol=lf
+*.groovy text eol=lf
+
+*.bsl  text eol=crlf
+*.xml  text eol=crlf
+*.mdo text eol=crlf
+*.form text eol=crlf
+*.dcss text eol=crlf
+*.mxlx text eol=crlf
+*.rights text eol=crlf
+
+# Бинарники
+
+Form.bin binary
+*.bin binary
+*.png binary
+*.ico binary
+*.epf binary
+
+# Настройки LFS
+
+*.cf filter=lfs diff=lfs merge=lfs -text
+*.cfe filter=lfs diff=lfs merge=lfs -text

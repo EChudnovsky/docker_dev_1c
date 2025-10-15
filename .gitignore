@@ -1,0 +1,15 @@
+﻿*Log.txt
+*.log
+*Err.txt
+temp/
+.vscode/
+out/
+builds/
+build/
+DumpFilesIndex.txt
+ConfigDumpInfo.xml
+ParentConfigurations.bin
+*.cf
+smoke_run*.cmd
+sonar_scanner.cmd
+.scannerwork
