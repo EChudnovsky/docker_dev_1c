@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=1cedt
+Comment=
+Exec=/usr/local/bin/1cedt
+Icon=/config/.config/png/edt2.png
+Path=
+Terminal=false
+StartupNotify=false

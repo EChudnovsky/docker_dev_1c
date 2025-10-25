@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=1cv8
+Comment=
+Exec=/usr/local/bin/1cv8
+Icon=/config/.config/png/1c_linux.png
+Path=
+Terminal=false
+StartupNotify=false

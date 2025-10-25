@@ -6,6 +6,11 @@ temp/
 out/
 builds/
 build/
+root/config/.docker
+root/config/.dotnet
+root/config/.dbus
+root/config/.vscode-server
+root/config/.ssh
 DumpFilesIndex.txt
 ConfigDumpInfo.xml
 ParentConfigurations.bin
@@ -13,3 +18,5 @@ ParentConfigurations.bin
 smoke_run*.cmd
 sonar_scanner.cmd
 .scannerwork
+root/config/.bash_history
+root/config/.gitconfig
