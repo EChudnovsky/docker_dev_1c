@@ -69,10 +69,10 @@ cli_edt_infobase() {
 }
 cli_edt_infobase-create() {
     
-    if [ -z "${DB_PATH_CF}" ]; then
-        cliedt -command infobase-create --name "${DB_NAME}" --path "${DB_PATH}" --version "${DB_VERSION}"
+    if [ -z "${_1C_DB_PATH_CF}" ]; then
+        cliedt -command infobase-create --name "${DB_NAME}" --path "${_1C_DB_PATH}" --version "${DB_VERSION}"
     el
-        cliedt -command infobase-create --name "${DB_NAME}" --path "${DB_PATH}" --version "${DB_VERSION}" --cf "${DB_PATH_CF}"
+        cliedt -command infobase-create --name "${DB_NAME}" --path "${_1C_DB_PATH}" --version "${DB_VERSION}" --cf "${_1C_DB_PATH_CF}"
     fi
 
 }

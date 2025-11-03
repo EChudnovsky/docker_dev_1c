@@ -37,7 +37,7 @@ echo "**** CATALOGS CREATION FOR TESTING ****"
 сreate_catalog_for_variable "CI_PROJECT_DIR"
 сreate_catalog_for_variable "PROJECT_BULD_DIR"
 сreate_catalog_for_variable "PROJECT_LOG_DIR"
-сreate_catalog_for_variable "DB_PATH"
+сreate_catalog_for_variable "_1C_DB_PATH"
 
 echo "**** SETTINGS OF THE ENVIRONMENT ****"
 

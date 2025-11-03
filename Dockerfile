@@ -41,14 +41,8 @@ ENV LANG=ru_RU.UTF-8 LC_ALL=ru_RU.UTF-8
 
 # ПЕРЕМЕННЫЕ СРЕДЫ, СБОРКИ И ТЕСТИРОВАНИЯ
 
-# Домашний каталог 1С
-ENV _1C_HOME=
 # Домашний каталог JAVA
 ENV JAVA_HOME=
-# Домашний каталог EDT
-ENV EDT_HOME=
-# Домашний каталог RING
-ENV RING_HOME=
 # Путь к библиотеке общих скриптов
 ENV CLI_LIB_PATH=/usr/local/bin/lib
 
@@ -65,6 +59,10 @@ ENV PROJECT_BULD_DIR=${CI_PROJECT_DIR}/buld
 ENV PROJECT_LOG_DIR=${PROJECT_BULD_DIR}/log
 
 # ПЕРЕМЕННЫЕ ДЛЯ РАБОТЫ С EDT
+# Домашний каталог EDT
+ENV EDT_HOME=
+# Домашний каталог RING
+ENV RING_HOME=
 # Лимит памяти выделяемый для запуска EDT
 ENV EDT_MEMORY_LIMIT=6124m
 # Один или несколько аргументов JVM (например, -Xmx, -D и т. д.).
@@ -81,14 +79,16 @@ ENV EDT_PATH_WORKSPACE=${PROJECT_BULD_DIR}/workspace
 ENV EDTCLI_SCRIPT_PATH=/1c_edt/cli-scripts/
 
 # ПЕРЕМЕННЫЕ ДЛЯ РАБОТЫ С 1C
+# Домашний каталог 1С
+ENV _1C_HOME=
 # Версия используемой платформы
-ENV DB_VERSION="8.3.24"
+ENV _1C_VERSION="8.3.24"
 # Имя базы
-ENV DB_NAME="db_test"
+ENV _1C_DB_NAME="db_test"
 # Путь к базе
-ENV DB_PATH=${PROJECT_BULD_DIR}/infobase
+ENV _1C_DB_PATH=${PROJECT_BULD_DIR}/infobase
 # Путь к .cf-файлу, на основе которого будет создана база или выгружен из БД
-ENV DB_PATH_CF=${PROJECT_BULD_DIR}/${CI_PROJECT_NAME}.cf
+ENV _1C_DB_PATH_CF=${PROJECT_BULD_DIR}/${CI_PROJECT_NAME}.cf
 
 # Настройка портов
 EXPOSE 80
