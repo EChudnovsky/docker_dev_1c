@@ -2,7 +2,6 @@
 
 # Вывод справки
 is_show_help=false
-h_command_name=
 h_description=
 h_description_full=
 h_syntax=
@@ -12,7 +11,16 @@ h_examples=
 
 function cli_show_help() {
     is_show_help=false
-    h_command_name=${h_command_name:-${FUNCNAME[1]}}
+    local h_command_name=
+    for (( i=${#FUNCNAME[@]}-1; i>=0 ; i-- ))
+    do 
+        h_command_name="${FUNCNAME[$i]}"
+        if [[ ${h_command_name} = *"cli_"* ]] && [[ "${h_command_name}" != *"cli_show_help"* ]]; then
+            break
+        else
+            h_command_name=""
+        fi        
+    done
     h_description=${h_description:-"Нет описания"}
     h_description_full=${h_description_full:-$h_description}
     h_syntax=${h_syntax:-"$h_command_name [ПАРАМЕТРЫ] [АРГУМЕНТЫ]"}

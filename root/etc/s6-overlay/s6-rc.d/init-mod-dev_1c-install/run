@@ -46,34 +46,18 @@ export JAVA_HOME=$(dirname "$(find "/opt/1C/1CE/components" -name "java" -type f
 export EDT_HOME=$(dirname "$(find "/opt/1C/1CE/components" -name "1cedtcli" -type f)")
 export RING_HOME=$(dirname "$(find "/opt/1C/1CE/components" -name "ring" -type f)")
 
+export _1C_VERSION_FULL=$(echo $_1C_HOME | grep -oP '\d+\.\d+\.\d+\.\d+$')
+export _1C_VERSION=$(echo $_1C_VERSION_FULL | grep -oP '\d+\.\d+\.\d+')
+
 echo "SET ENVIRONMENT VARIABLES: 
 _1C_HOME=${_1C_HOME}
+_1C_VERSION=${_1C_VERSION}
+_1C_VERSION_FULL=${_1C_VERSION_FULL}
 EDT_HOME=${EDT_HOME}
 JAVA_HOME=${JAVA_HOME}
 RING_HOME=${RING_HOME}
 PATH=${PATH}
 "
-
-# Определение ALIAS
-alias_str=("1cedtcli")
-if [[ -n ${EDT_PATH_WORKSPACE} ]] ; then
-    alias_str+=("-data ${EDT_PATH_WORKSPACE}")
-else
-    echo "Не задан путь для переменной \${EDT_PATH_WORKSPACE}. Операция прервана"
-    exit 1
-fi
-# Максимальное время выполнения в секундах
-if [[ -n ${EDT_MAXTIMEOUT} ]] ; then
-    alias_str+=("-timeout ${EDT_MAXTIMEOUT}")
-fi
-
-if [[ -n ${EDT_VMARGS} ]] ; then
-    alias_str+=("-vmargs ${EDT_VMARGS}")
-fi
-
-IFS=' ' # разделитель
-alias cliedt='${alias_str[*]}'
-
 # Настройка параметров запуска edt по-умолчанию
 sed -i "s/^\(-Xmx\).*$/\1${EDT_MEMORY_LIMIT}/" "$EDT_HOME/1cedt.ini"
 
@@ -94,7 +78,9 @@ cat <<EOF >> /etc/bash.bashrc
   export RING_HOME="${RING_HOME}"
   export JAVA_HOME="${JAVA_HOME}"
   export PATH=${PATH}
-  
+  export _1C_VERSION=${_1C_VERSION}
+  export _1C_VERSION_FULL=${_1C_VERSION_FULL}
+
   # Подключение библиотек сборок
   if [ -d \$CLI_LIB_PATH ]; then
     for i in "\${CLI_LIB_PATH}"/*.sh; do
@@ -106,6 +92,4 @@ cat <<EOF >> /etc/bash.bashrc
     unset i
   fi
 
-  IFS=' ' # разделитель
-  alias cliedt='${alias_str[*]}'
 EOF

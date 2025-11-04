@@ -82,7 +82,8 @@ ENV EDTCLI_SCRIPT_PATH=/1c_edt/cli-scripts/
 # Домашний каталог 1С
 ENV _1C_HOME=
 # Версия используемой платформы
-ENV _1C_VERSION="8.3.24"
+ENV _1C_VERSION=
+ENV _1C_VERSION_FULL=
 # Имя базы
 ENV _1C_DB_NAME="db_test"
 # Путь к базе
