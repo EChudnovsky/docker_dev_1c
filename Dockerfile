@@ -89,7 +89,8 @@ ENV _1C_DB_NAME="db_test"
 # Путь к базе
 ENV _1C_DB_PATH=${PROJECT_BULD_DIR}/infobase
 # Путь к .cf-файлу, на основе которого будет создана база или выгружен из БД
-ENV _1C_DB_PATH_CF=${PROJECT_BULD_DIR}/${CI_PROJECT_NAME}.cf
+ENV _1C_DB_PATH_CF_LOAD=
+ENV _1C_DB_PATH_CF_SAVE=${PROJECT_BULD_DIR}/${CI_PROJECT_NAME}.cf
 
 # Настройка портов
 EXPOSE 80

@@ -102,10 +102,10 @@ cli_str_uuid(1)    Пользовательские команды    cli_str_uu
 |**cli_edt_export**                     |CI_PROJECT_NAME, EDT_PATH_PROJECT  |Экспортирует проект 1C:EDT в .xml-файлы конфигурации|
 |**cli_edt_format-modules**             |CI_PROJECT_NAME, EDT_PATH_PROJECT  |Форматирует все модули встроенного языка в соответствии с настройками форматирования|
 |**cli_edt_help**                       |                                   | выводит список доступных команд или кодов возврата|
-|**cli_edt_import**                     |CI_PROJECT_NAME, EDT_PATH_PROJECT  |Импортирует проект 1C:EDT в рабочую область   |
-|**cli_edt_infobase**                   |                                   |Показывает список информационных баз и информацию о выбранных базах   |
-|**cli_edt_infobase-create**            |_1C_DB_PATH_CF, DB_NAME, DB_VERSION|Создает информационную базу   |
-|**cli_edt_infobase-delete**            |DB_NAME                            |Удаляет одну или несколько информационных баз   |
+|**cli_edt_import**                     |CI_PROJECT_NAME, EDT_PATH_PROJECT       |Импортирует проект 1C:EDT в рабочую область   |
+|**cli_edt_infobase**                   |                                        |Показывает список информационных баз и информацию о выбранных базах   |
+|**cli_edt_infobase-create**            |_1C_DB_PATH_CF_LOAD, DB_NAME, DB_VERSION|Создает информационную базу   |
+|**cli_edt_infobase-delete**            |DB_NAME                                 |Удаляет одну или несколько информационных баз   |
 |**cli_edt_infobase-import**            |DB_NAME, CI_PROJECT_NAME           |Импортирует информационную базу в проект   |
 |**cli_edt_install-platform-support**   |DB_VERSION                         |Устанавливает поддержку платформы «1С:Предприятие» указанной версии   |
 |**cli_edt_platform-versions**          |                                   |Сообщает список версий платформы «1С:Предприятие», которые поддерживаются данной средой разработки|

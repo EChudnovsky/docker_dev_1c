@@ -3,16 +3,20 @@
 # Вывод справки
 is_show_help=false
 h_description=
+h_command_name=
+g_code=
 
 # СЛУЖЕБНЫЕ ФУНКЦИИ
 
 function show_help_edt() {
+
     is_show_help=false
-    local h_command_name=
+    h_command_name=""
+
     for (( i=${#FUNCNAME[@]}-1; i>=0 ; i-- ))
     do 
         h_command_name="${FUNCNAME[$i]}"
-        if [[ ${h_command_name} = *"cli_"* ]] && [[ "${h_command_name}" != *"show_help_edt"* ]]; then
+        if [[ ${h_command_name} = *"cli-"* ]] && [[ "${h_command_name}" != *"show_help_edt"* ]]; then
             break
         else
             h_command_name=""
@@ -29,7 +33,7 @@ function show_help_edt() {
     done
 
     if [[ "$is_show_help" = true ]]; then
-        h_command_name=$(echo "${h_command_name}" | sed 's/cli_edt_//')
+        h_command_name=$(echo "${h_command_name}" | sed 's/cli-edt-//')
 echo "
 ${h_command_name}(1)    Пользовательские команды EDT    ${h_command_name}(1)
 
@@ -38,38 +42,113 @@ ${h_description}
 "
         cliedt -command help ${h_command_name}
     fi
+    
+    # очистка заголовка для следующих команд
+    h_description=""    
 
 }
 
-function cliedt(){
+# НАЧАЛО. ВЫВОД В КОНСОЛЬ
 
-    # Определение ALIAS
-    local params=()
-    if [[ -n ${EDT_PATH_WORKSPACE} ]] ; then
-        params+=("-data ${EDT_PATH_WORKSPACE}")
+function print_log() {
+    #  $1 - Текст сообщения
+    #  $2 - Если 0 = успех иначе 0 <> Код ошибки
+    #  $3 - Если не пустой вызывает исключение с кодом ошибки
+
+    local l_code=0
+    
+    # Передан код числом
+    [[ "$2" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && l_code=$2 
+    # Передан признак
+    [[ "$2" == "true" ]]  && l_code=1
+
+    if [ "$l_code" -ne 0 ]; then
+        echo -e "[ERROR] $1. Код ошибки: ($l_code)" >&2
+        if [ ! -z "$3" ]; then
+            exit $l_code
+        fi
     else
-        echo "Не задан путь для переменной \${EDT_PATH_WORKSPACE}. Операция прервана"
-        exit 1
+        echo -e "[INFO] $1"
     fi
-    # Максимальное время выполнения в секундах
-    if [[ -n ${EDT_MAXTIMEOUT} ]] ; then
-        params+=("-timeout ${EDT_MAXTIMEOUT}")
-    fi
+}
 
-    if [[ -n ${EDT_VMARGS} ]] ; then
-        params+=("-vmargs ${EDT_VMARGS}")
+function print_start_command(){
+    g_code=0
+    print_log "НАЧАЛО. Команда: $h_command_name. \n ${h_description}"
+}
+
+function print_end_command(){
+    print_log  "ОКОНЧАНИЕ.  Команда: $h_command_name" $g_code "true"
+}
+
+# КОНЕЦ. ВЫВОД В КОНСОЛЬ
+
+сreate_catalog() {
+    
+    local value=$1
+    
+    [ -z "$value" ] && print_log "Передан пустой путь каталога для создания" 1 "true"
+    
+    # Пересоздавать каталог
+    if [ -d "$value" ]; then
+        [[ "$2" == "true" ]]  && rm -f -r ${value}/* || print_log "Не удалось очистить каталог: $value" 1 "true"
+    else
+        mkdir -p "$value" || print_log "Ошибка создания каталога: $value" 1 "true"
     fi
+    
+    print_log "Создан каталог: $value"
+}
+
+
+function cliedt(){
+    
+    local resualt=
+    g_code=0
+
+    [[ -z ${EDT_PATH_WORKSPACE} ]] && print_log  "Не задан путь для переменной \${EDT_PATH_WORKSPACE}. Операция прервана" 1 "true"
+    
+    local params=()
+    params+=("-data ${EDT_PATH_WORKSPACE}")
+
+    # Максимальное время выполнения в секундах
+    [[ -n ${EDT_MAXTIMEOUT} ]] && params+=("-timeout ${EDT_MAXTIMEOUT}")
+    [[ -n ${EDT_VMARGS} ]] && params+=("-vmargs ${EDT_VMARGS}")
+    
     params+=("$@")
 
     IFS=' ' # разделитель
     strparams="${params[*]}"
+    
+    IFS=$'\n'    
+    resualt="$(1cedtcli $strparams)"
+    
+    g_code=$?
+    if [[ -z "$g_code" || $g_code -eq 0 ]]; then
+        case "$resualt" in
+            *"успешно завершено"*) g_code=0;;
+            *"Не удалось запустить 1C:EDT CLI"*) g_code=1;;
+            *"код ошибки*") g_code=1;;
+            *) g_code=0:;;
+        esac
+    fi
 
-    1cedtcli $strparams
+    # for l_msg in $resualt; do
+    #     if [[ "$l_msg" = *"код ошибки"* ]]; then
+    #         g_code=1
+    #     elif [[ "$l_msg" = *"Не удалось запустить 1C:EDT CLI"* ]]; then
+    #         g_code=1
+    #     elif [[ "$l_msg" = *"успешно завершено"* ]]; then
+    #         g_code=0
+    #     fi
+    # done
+    
+    echo "$resualt"
+
 }
 
-# ОБЩИЕ ФУНКЦИИ
+# ПРОГРАММНЫЙ ИНТЕРФЕЙС
 
-cli_edt_version() {
+cli-edt-version() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -85,7 +164,7 @@ cli_edt_version() {
 
 }
 
-cli_edt_cd() {
+cli-edt-cd() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -100,7 +179,7 @@ cli_edt_cd() {
     cliedt -command cd "$@"
 }
 
-cli_edt_help() {
+cli-edt-help() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -112,12 +191,12 @@ cli_edt_help() {
     fi
 
     # Основная логика
-    local params=$(echo "${@}" | sed 's/cli_edt_//')
+    local params=$(echo "${@}" | sed 's/cli-edt-//')
     cliedt -command help "$params"
 
 }
 
-cli_edt_platform-versions() {
+cli-edt-platform-versions() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -133,7 +212,7 @@ cli_edt_platform-versions() {
 
 }
 
-cli_edt_install-platform-support() {
+cli-edt-install-platform-support() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -153,11 +232,18 @@ cli_edt_install-platform-support() {
         params="${@}"
     fi
 
+    h_description="Установка поддержки версии платформы 
+    Параметры: $params"
+    
+    print_start_command
+    
     cliedt -command install-platform-support ${params}
+
+    print_end_command
 
 }
 
-cli_edt_uninstall-platform-support() {
+cli-edt-uninstall-platform-support() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -176,13 +262,21 @@ cli_edt_uninstall-platform-support() {
     else
         params="${@}"
     fi
+
+    h_description="Удаление поддержки версии платформы 
+    Параметры: $params"
+
+    print_start_command
+    
     cliedt -command uninstall-platform-support ${params}
+    
+    print_end_command
 
 }
 
 # РАБОТА С ПРОЕКТАМИ EDT
 
-cli_edt_project() {
+cli-edt-project() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -200,12 +294,60 @@ cli_edt_project() {
     else
         params="${@}"
     fi
+    
+    local result=$(cliedt -command project "$@")
 
-    cliedt -command project "$@" 
+    [ -z "$result" ] && result="<Нет сведений о проектах>"
+    
+    print_log "$result" "$g_code" "true"
 
 }
 
-cli_edt_build() {
+# РАБОТА С БАЗОЙ
+
+cli-edt-infobase-create() {
+
+    # Обработка параметров и вывод help
+    h_description="
+    Создает информационную базу."
+
+    show_help_edt "$@"
+    if [[ "$is_show_help" = true ]]; then
+        return 0
+    fi
+
+    # Основная логика
+    h_description="Создание информационной базы"
+    print_start_command
+
+    local params=""
+    if [[ -n "${_1C_DB_PATH_CF_LOAD}" ]]; then
+    
+        print_log "из конфигурационного файла
+    PATH_CF: ${_1C_DB_PATH_CF_LOAD}
+    DB_NAME: ${_1C_DB_NAME}
+    DB_PATH: ${_1C_DB_PATH}"
+
+        [[ ! -f ${_1C_DB_PATH_CF_LOAD} ]] && print_log "Не удалось найти файл для загрузки. Операция прервана" "true" "true"
+        params=-cf "${_1C_DB_PATH_CF_LOAD}"
+        
+    else
+
+    print_log "пустой базы
+    DB_NAME: ${_1C_DB_NAME}
+    DB_PATH: ${_1C_DB_PATH}"
+
+    fi
+
+    сreate_catalog ${_1C_DB_PATH} true
+
+    cliedt -command infobase-create --name "${_1C_DB_NAME}" --path "${_1C_DB_PATH}" --version "${_1C_VERSION}" ${params}
+
+    print_end_command
+
+}
+
+cli-edt-build() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -218,9 +360,16 @@ cli_edt_build() {
     fi
 
     # Основная логика
+    h_description="Очистка и пересбор проекта"
+    print_start_command
+
     cliedt -command build "$@"
+
+    print_end_command
+
 }
-cli_edt_clean-up-source() {
+
+cli-edt-clean-up-source() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -232,10 +381,16 @@ cli_edt_clean-up-source() {
     fi
 
     # Основная логика
+    h_description="Оптимизация формата хранения"
+    print_start_command
+
     cliedt -command clean-up-source --project-name "${CI_PROJECT_NAME}" --project "${EDT_PATH_PROJECT}" "$@"
 
+    print_end_command
+
 }
-cli_edt_delete() {
+
+cli-edt-delete() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -247,11 +402,16 @@ cli_edt_delete() {
     fi
 
     # Основная логика
+    h_description="Удаление проекта"
+    print_start_command
+
     cliedt -command delete "$@"
+
+    print_end_command
 
 }
 
-cli_edt_export() {
+cli-edt-export() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -263,11 +423,16 @@ cli_edt_export() {
     fi
 
     # Основная логика
+    h_description="Экспортиру проекта 1C:EDT в .xml-файлы конфигурации"
+    print_start_command
+
     cliedt -command export --project-name "${CI_PROJECT_NAME}" --project "${EDT_PATH_PROJECT}" "$@"
+
+    print_end_command
 
 }
 
-cli_edt_format-modules() {
+cli-edt-format-modules() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -279,11 +444,16 @@ cli_edt_format-modules() {
     fi
 
     # Основная логика
+    h_description="Форматирование модулей встроенного языка проекта EDT"
+    print_start_command
+
     cliedt -command format-modules --project-name "${CI_PROJECT_NAME}" --project "${EDT_PATH_PROJECT}" "$@"
+
+    print_end_command
 
 }
 
-cli_edt_import() {
+cli-edt-import() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -296,11 +466,16 @@ cli_edt_import() {
     fi
 
     # Основная логика
+    h_description="Импортирование проекта EDT"
+    print_start_command
+
     cliedt -command import --project-name "${CI_PROJECT_NAME}" --project "${EDT_PATH_PROJECT}" "$@"
+
+    print_end_command
 
 }
 
-cli_edt_infobase() {
+cli-edt-infobase() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -315,27 +490,8 @@ cli_edt_infobase() {
     cliedt -command infobase "$@" 
 
 }
-cli_edt_infobase-create() {
 
-    # Обработка параметров и вывод help
-    h_description="
-    Создает информационную базу."
-
-    show_help_edt "$@"
-    if [[ "$is_show_help" = true ]]; then
-        return 0
-    fi
-
-    # Основная логика
-    if [ -z "${_1C_DB_PATH_CF}" ]; then
-        cliedt -command infobase-create --name "${DB_NAME}" --path "${_1C_DB_PATH}" --version "${DB_VERSION}"
-    el
-        cliedt -command infobase-create --name "${DB_NAME}" --path "${_1C_DB_PATH}" --version "${DB_VERSION}" --cf "${_1C_DB_PATH_CF}"
-    fi
-
-}
-
-cli_edt_infobase-delete() {
+cli-edt-infobase-delete() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -347,11 +503,16 @@ cli_edt_infobase-delete() {
     fi
 
     # Основная логика
-    cliedt -command infobase-delete --name "${DB_NAME}" "$@" 
+    h_description="Удаление информационной базы"
+    print_start_command
+
+    cliedt -command infobase-delete --name "${_1C_DB_NAME}" "$@" 
+
+    print_end_command
 
 }
 
-cli_edt_infobase-import() {
+cli-edt-infobase-import() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -363,11 +524,16 @@ cli_edt_infobase-import() {
     fi
 
     # Основная логика
-    cliedt -command infobase-import --name "${DB_NAME}" --project-name "${CI_PROJECT_NAME}" "$@" 
+    h_description="Импортирование информационной базы в проект"
+    print_start_command
+
+    cliedt -command infobase-import --name "${_1C_DB_NAME}" --project-name "${CI_PROJECT_NAME}" "$@" 
+
+    print_end_command
 
 }
 
-cli_edt_script() {
+cli-edt-script() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -379,11 +545,12 @@ cli_edt_script() {
     fi
 
     # Основная логика
+
     cliedt -command script "$@"
 
 }
 
-cli_edt_sort-project() {
+cli-edt-sort-project() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -397,12 +564,17 @@ cli_edt_sort-project() {
     fi
 
     # Основная логика
+    h_description="Сортировка объектов конфигурации"
+    print_start_command
+
     cliedt -command sort-project --project-list ["${EDT_PATH_PROJECT}"]
+    
+    print_end_command
 
 }
 
 
-cli_edt_validate() {
+cli-edt-validate() {
 
     # Обработка параметров и вывод help
     h_description="
@@ -414,11 +586,16 @@ cli_edt_validate() {
     fi
 
     # Основная логика
+    h_description="Проверка проекта и выводит результат в .tsv-файл "
+    print_start_command
+
     cliedt -command validate --file "${PROJECT_LOG_DIR}\validation-result.tsv" --project-list ["${EDT_PATH_PROJECT}"]
+    
+    print_end_command
 
 }
 
-cli_edt_run_script_file() {
+cli-edt-run_script_file() {
     
     # Обработка параметров и вывод help
     h_description=
@@ -428,7 +605,13 @@ cli_edt_run_script_file() {
     fi
 
     # Основная логика
+    h_description="Выполнение скрипта EDT из файла"
+    print_start_command
+
     cliedt -file "$1"
+
+    print_end_command
+    
 }
 
-cli_edt_project
+# cli-edt-infobase-create
