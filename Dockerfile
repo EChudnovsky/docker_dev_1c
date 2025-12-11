@@ -17,9 +17,11 @@ FROM rdesktop_base AS base_1c
 
 ARG PATH_INSTALL_EDT="http://localhost:8090/1c_edt_distr_offline_2025.1.4_15_linux_x86_64.tar.gz"
 ARG PATH_INSTALL_1C="http://localhost:8090/server64_8_3_24_1819.zip"
+ARG PATH_INSTALL_EXECUTOR="http://localhost:8090/script_x_linux_9.0.0-2.zip"
 
 ADD --link $PATH_INSTALL_EDT /tmp/install/edt/1cedt.tar.gz
 ADD --link $PATH_INSTALL_1C /tmp/install/1с/1c.zip
+ADD --link $PATH_INSTALL_EXECUTOR /tmp/install/executor/executor.zip
 
 RUN echo "**** INSTALL EDT ****" \
     && tar -xvf "/tmp/install/edt/1cedt.tar.gz" -C "/tmp/install/edt" \
@@ -27,7 +29,10 @@ RUN echo "**** INSTALL EDT ****" \
     && /tmp/install/edt/1ce-installer-cli install --ignore-hardware-checks --ignore-signature-warnings \
     && echo "**** INSTALL PLATFORM 1C ****" \
     && 7z x /tmp/install/1с/1c.zip -o/tmp/install/1с \
-    && find /tmp/install/1с/ -type f -name "setup-full-8*.run" -exec sh -c '{} --mode unattended --installer-language ru --enable-components client_full,ru,server,ws' \;
+    && find /tmp/install/1с/ -type f -name "setup-full-8*.run" -exec sh -c '{} --mode unattended --installer-language ru --enable-components client_full,ru,server,ws' \; \
+    && echo "**** INSTALL 1C:EXECUTOR ****" \
+    && 7z x /tmp/install/executor/executor.zip -o/opt/1C/1CE/components/Executor \
+    && rm -rf /tmp/install
 
 FROM rdesktop_base AS dev_1c
 COPY --from=base_1c  /opt/ /opt/
@@ -53,6 +58,7 @@ ENV JAVA_HOME=""
 
 # Путь к библиотеке общих скриптов
 ENV CLI_LIB_PATH="/usr/local/sbin"
+ENV EXECUTOR_MODULES_PATH="${CLI_LIB_PATH}/executor-lib"
 
 # ПЕРЕМЕННЫЕ GITLAB ДЛЯ РАБОТЫ С ПРОЕКТОМ
 
