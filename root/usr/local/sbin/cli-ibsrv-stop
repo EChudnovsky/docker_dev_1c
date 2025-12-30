@@ -1,0 +1,74 @@
+#!/command/with-contenv bash
+
+: <<'DOCUMENTATION'
+Название: сli-ibsrv-stop
+Назначение: Останавливает запущенные процессы автономного сервера 1C
+Требования:
+  - Нет
+
+Использование:
+    #!/bin/bash
+    
+    сli-ibsrv-stop
+
+Возвращаемые коды:
+  0 - успех
+  1 - ошибка операции
+
+DOCUMENTATION
+
+# Подключение общих библиотек
+source ${CLI_LIB_PATH}/lib/cli-logger
+
+# ОСНОВНАЯ ЛОГИКА
+PROCESS="ibsrv"
+
+main() {
+  # Проверяем права пользователя
+  if [[ $EUID -eq 0 ]]; then
+      info "Скрипт запущен от root"
+  else
+      info "ВНИМАНИЕ: Скрипт запущен не от root, могут быть проблемы с правами"
+  fi
+
+  # Ищем PID процесса
+  PIDS=$(pgrep -x "$PROCESS")
+
+  if [[ -z "$PIDS" ]]; then
+      info "Процесс $PROCESS не найден"
+      exit 0
+  fi
+
+  info "Найдены процессы $PROCESS с PID: $PIDS"
+
+  # Пытаемся корректно завершить (SIGTERM)
+  info "Отправляем SIGTERM (корректное завершение)..."
+  kill $PIDS 2>/dev/null
+
+  # Ждем 5 секунд
+  sleep 5
+
+  # Проверяем, остались ли процессы
+  REMAINING_PIDS=$(pgrep -x "$PROCESS")
+  if [[ -n "$REMAINING_PIDS" ]]; then
+      info "Процессы все еще живы: $REMAINING_PIDS"
+      info "Отправляем SIGKILL (принудительное завершение)..."
+      kill -9 $REMAINING_PIDS 2>/dev/null
+      sleep 2
+      
+      # Финальная проверка
+      if pgrep -x "$PROCESS" >/dev/null; then
+          error "Не удалось завершить процесс $PROCESS!"
+          exit 1
+      else
+          info "Процесс $PROCESS принудительно завершен"
+      fi
+  else
+      info "Процесс $PROCESS корректно завершен"
+  fi
+
+  exit 0
+
+}
+
+main "$@"

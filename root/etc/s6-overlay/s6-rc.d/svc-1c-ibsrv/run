@@ -1,0 +1,15 @@
+#!/command/with-contenv bash
+
+if ! pgrep -x "ibsrv" > /dev/null; then
+    
+    source "${CLI_LIB_PATH}/lib/cli-logger"
+    
+    info "Запуск сервиса автономного сервера..."
+    # Запустим автомный сервер
+    cli-ibsrv-start
+
+    # Выравним права созданных файлов
+    chown --reference=/config/ -R ${_1C_IBSRV_DATA}
+    info "Запуск сервиса автономного сервера...Завершено"
+
+fi

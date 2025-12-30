@@ -1,0 +1,86 @@
+#!/command/with-contenv bash
+
+: <<'DOCUMENTATION'
+Название: cli-ibsrv-init
+Назначение: Инициирует конфигурацию автономного сервера 1C. 
+            Удаляется седержимое папки автономного сервера (${_1C_IBSRV_DATA}).
+            Генерируется файл конфигурация ${_1C_IBSRV_CONF}.
+
+Требования:
+  - Нет
+
+Использование:
+    #!/bin/bash
+    
+    cli-ibsrv-init
+
+Возвращаемые коды:
+  0 - успех
+  1 - ошибка операции
+
+DOCUMENTATION
+
+# Подключение общих библиотек
+source ${CLI_LIB_PATH}/lib/cli-common
+source ${CLI_LIB_PATH}/lib/cli-logger
+
+create-config() {
+  rm -rf "${_1C_IBSRV_DATA}"
+  mkdir -p "${_1C_IBSRV_DATA}/.ssh"
+  yes | ssh-keygen -t rsa -b 4096 -f ${_1C_IBSRV_DATA}/.ssh/id_rsa -q -N "" -C "user@hostname" >/dev/null
+
+cat > "${_1C_IBSRV_CONF}" << EOF
+server:
+  address: "any"
+  port: ${_1C_IBSRV_PORT}
+database:
+  path: "${_1C_DB_PATH}"
+  user: "${_1C_DB_USER}"
+  password: "${_1C_DB_PWD}"
+infobase:
+  id: "$(uuid)"
+  name: "${_1C_DB_NAME}"
+  distribute-licenses: "yes"
+  schedule-jobs: "no"
+http:
+- base: "/"
+gates:
+  ssh:
+    admin:
+      address: "any"
+      port: ${_1C_IBSRV_PORT_HTTP}
+      host-key: "${_1C_IBSRV_DATA}/.ssh/id_rsa"
+features:
+  direct-gate: "enable"
+  http-gate: "enable"
+  ssh-gate: "enable"
+debug:
+  type: "http"
+  address: "any"
+  port: ${_1C_IBSRV_PORT_DEBUG}
+EOF
+
+}
+
+# ОСНОВНАЯ ЛОГИКА
+main() {
+
+    info "Инициализация автономного сервера 1С..."
+
+    # Проверим существующие процессы на запущенный сервер
+    if $(is_ibsrv_running); then
+        cli-ibsrv-stop
+    fi
+
+    # Создадим конфигурацию сервера, если ее нет
+    create-config || {
+        error "Ошибка инициализации автономного сервера."
+        exit 1
+    }
+    
+    info "Инициализация сервера завершена..."
+    exit 0
+    
+}
+
+main "$@"

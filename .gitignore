@@ -1,4 +1,6 @@
-﻿*Log.txt
+﻿.vscode
+log/
+*Log.txt
 *.log
 *Err.txt
 temp/
@@ -6,6 +8,7 @@ temp/
 out/
 builds/
 build/
+root/config/buld/
 root/config/.docker
 root/config/.dotnet
 root/config/.dbus

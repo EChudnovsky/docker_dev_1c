@@ -1,0 +1,471 @@
+#!/command/with-contenv bash
+
+: <<'DOCUMENTATION'
+Название: cli-unpack
+Назначение: Распаковка архивов.
+            Поддерживает форматы: .zip, .tar, .tar.gz, .tar.bz2, .tar.xz, .rar, .7z
+
+Требования:
+  - Нет
+
+Использование:
+    #!/bin/bash
+    cli-ib-create
+
+Возвращаемые коды:
+  0 - успех
+  1 - ошибка операции
+
+DOCUMENTATION
+
+set -euo pipefail
+
+# Подключение общих библиотек
+source ${CLI_LIB_PATH}/lib/cli-logger
+
+
+# ============================================================================
+# КОНФИГУРАЦИЯ И КОНСТАНТЫ
+# ============================================================================
+
+readonly SUPPORTED_ARCHIVES=(
+    ".zip" ".tar" ".tar.gz" ".tgz" ".tar.bz2" ".tbz2" 
+    ".tar.xz" ".txz" ".rar" ".7z" ".gz" ".bz2"
+)
+
+# ============================================================================
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# ============================================================================
+
+# Проверка наличия команды
+require_command() {
+    local cmd="$1"
+    local package="${2:-$cmd}"
+    
+    if ! command -v "$cmd" &>/dev/null; then
+        error "Требуется команда '$cmd'"
+        info "Установите: $package"
+        return 1
+    fi
+    return 0
+}
+
+# Получение расширения файла
+get_extension() {
+    local file="$1"
+    local filename=$(basename -- "$file")
+    local extension="${filename##*.}"
+    
+    # Для многосоставных расширений (.tar.gz и т.д.)
+    case "$filename" in
+        *.tar.gz|*.tgz) echo ".tar.gz" ;;
+        *.tar.bz2|*.tbz2) echo ".tar.bz2" ;;
+        *.tar.xz|*.txz) echo ".tar.xz" ;;
+        *.tar.zst) echo ".tar.zst" ;;
+        *) echo ".$extension" ;;
+    esac
+}
+
+# Проверка, является ли файл архивом
+is_archive() {
+    local file="$1"
+    
+    # Проверка существования
+    [[ ! -f "$file" ]] && {
+        error "Файл не существует: $file"
+        return 1
+    }
+    
+    # Проверка по расширению
+    local extension
+    extension=$(get_extension "$file")
+    
+    for supported in "${SUPPORTED_ARCHIVES[@]}"; do
+        if [[ "$extension" == "$supported" ]]; then
+            return 0
+        fi
+    done
+    
+    # Проверка file command (более надежно)
+    if file --mime-type "$file" | grep -q -E '(archive|compressed|zip|tar|gzip|bzip2|xz|rar|7z)'; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Определение типа архива
+get_archive_type() {
+    local file="$1"
+    local extension
+    extension=$(get_extension "$file")
+    
+    case "$extension" in
+        .zip) echo "zip" ;;
+        .tar) echo "tar" ;;
+        .tar.gz|.tgz) echo "tar.gz" ;;
+        .tar.bz2|.tbz2) echo "tar.bz2" ;;
+        .tar.xz|.txz) echo "tar.xz" ;;
+        .gz) echo "gz" ;;
+        .bz2) echo "bz2" ;;
+        .rar) echo "rar" ;;
+        .7z) echo "7z" ;;
+        *) 
+            # Пытаемся определить через file
+            local file_type
+            file_type=$(file -b "$file" | tr '[:upper:]' '[:lower:]')
+            case "$file_type" in
+                *zip*) echo "zip" ;;
+                *tar*) echo "tar" ;;
+                *gzip*) echo "gz" ;;
+                *bzip2*) echo "bz2" ;;
+                *xz*) echo "xz" ;;
+                *rar*) echo "rar" ;;
+                *7z*) echo "7z" ;;
+                *) echo "unknown" ;;
+            esac
+            ;;
+    esac
+}
+
+# Создание уникальной директории для распаковки
+create_extract_dir() {
+    local archive="$1"
+    local base_dir="${2:-.}"
+    
+    local archive_name=$(basename -- "$archive")
+    local dir_name="${archive_name%.*}"
+    
+    # Если директория уже существует, добавляем суффикс
+    local extract_dir="$base_dir/$dir_name"
+    local counter=1
+    
+    while [[ -d "$extract_dir" ]]; do
+        extract_dir="$base_dir/${dir_name}_${counter}"
+        ((counter++))
+    done
+    
+    mkdir -p "$extract_dir"
+    echo "$extract_dir"
+}
+
+# ============================================================================
+# ФУНКЦИИ РАСПАКОВКИ
+# ============================================================================
+
+# Распаковка ZIP
+extract_zip() {
+    local archive="$1"
+    local output_dir="$2"
+    
+    require_command "unzip" "unzip" || return 1
+    
+    info "Распаковка ZIP: $archive -> $output_dir"
+    if unzip -q "$archive" -d "$output_dir"; then
+        info "ZIP распакован успешно..."
+        return 0
+    else
+        error "Ошибка распаковки ZIP"
+        return 1
+    fi
+}
+
+# Распаковка TAR
+extract_tar() {
+    local archive="$1"
+    local output_dir="$2"
+    local compression="$3"  # gz, bz2, xz, или пусто
+    
+    require_command "tar" "tar" || return 1
+    
+    local tar_cmd="tar"
+    local tar_flags="xf"
+    
+    case "$compression" in
+        gz) tar_flags="xzf" ;;
+        bz2) tar_flags="xjf" ;;
+        xz) tar_flags="xJf" ;;
+        zst) 
+            require_command "zstd" "zstd" || return 1
+            tar_flags="xIf"
+            ;;
+    esac
+    
+    info "Распаковка TAR ($compression): $archive -> $output_dir"
+    if tar "$tar_flags" "$archive" -C "$output_dir"; then
+        info "TAR распакован успешно"
+        return 0
+    else
+        error "Ошибка распаковки TAR"
+        return 1
+    fi
+}
+
+# Распаковка GZ
+extract_gz() {
+    local archive="$1"
+    local output_dir="$2"
+    
+    require_command "gzip" "gzip" || return 1
+    
+    info "Распаковка GZ: $archive -> $output_dir"
+    local filename=$(basename -- "$archive")
+    local output_file="$output_dir/${filename%.gz}"
+    
+    if gzip -dc "$archive" > "$output_file"; then
+        info "GZ распакован успешно"
+        echo "$output_file"
+        return 0
+    else
+        error "Ошибка распаковки GZ"
+        return 1
+    fi
+}
+
+# Распаковка BZ2
+extract_bz2() {
+    local archive="$1"
+    local output_dir="$2"
+    
+    require_command "bzip2" "bzip2" || return 1
+    
+    info "Распаковка BZ2: $archive -> $output_dir"
+    local filename=$(basename -- "$archive")
+    local output_file="$output_dir/${filename%.bz2}"
+    
+    if bzip2 -dc "$archive" > "$output_file"; then
+        info "BZ2 распакован успешно"
+        echo "$output_file"
+        return 0
+    else
+        error "Ошибка распаковки BZ2"
+        return 1
+    fi
+}
+
+# Распаковка RAR
+extract_rar() {
+    local archive="$1"
+    local output_dir="$2"
+    
+    require_command "unrar" "unrar" || {
+        # Пробуем rar
+        require_command "rar" "rar" || return 1
+    }
+    
+    info "Распаковка RAR: $archive -> $output_dir"
+    
+    if command -v unrar &>/dev/null; then
+        if unrar x -inul "$archive" "$output_dir/"; then
+            info "RAR распакован успешно"
+            return 0
+        fi
+    elif command -v rar &>/dev/null; then
+        if rar x -inul "$archive" "$output_dir/"; then
+            info "RAR распакован успешно"
+            return 0
+        fi
+    fi
+    
+    error "Ошибка распаковки RAR"
+    return 1
+}
+
+# Распаковка 7Z
+extract_7z() {
+    local archive="$1"
+    local output_dir="$2"
+    
+    require_command "7z" "p7zip-full" || return 1
+    
+    info "Распаковка 7Z: $archive -> $output_dir"
+    if 7z x -y "$archive" -o"$output_dir" > /dev/null; then
+        info "7Z распакован успешно"
+        return 0
+    else
+        error "Ошибка распаковки 7Z"
+        return 1
+    fi
+}
+
+# Основная функция распаковки
+extract_archive() {
+    local archive="$1"
+    local output_dir="${2:-}"
+    
+    # Проверяем архив
+    if ! is_archive "$archive"; then
+        error "Не является архивом или неподдерживаемый формат: $archive"
+        return 1
+    fi
+    
+    # Определяем тип архива
+    local archive_type
+    archive_type=$(get_archive_type "$archive")
+    
+    # Создаем директорию для распаковки если не указана
+    if [[ -z "$output_dir" ]]; then
+        output_dir=$(create_extract_dir "$archive" "$(dirname "$archive")")
+    else
+        mkdir -p "$output_dir"
+    fi
+    
+    info "Распаковываю $archive_type архив: $(basename "$archive")"
+    info "Целевая директория: $output_dir"
+    
+    # Выбираем метод распаковки
+    local result=1
+    case "$archive_type" in
+        zip)
+            extract_zip "$archive" "$output_dir"
+            result=$?
+            ;;
+        tar)
+            extract_tar "$archive" "$output_dir"
+            result=$?
+            ;;
+        tar.gz)
+            extract_tar "$archive" "$output_dir" "gz"
+            result=$?
+            ;;
+        tar.bz2)
+            extract_tar "$archive" "$output_dir" "bz2"
+            result=$?
+            ;;
+        tar.xz)
+            extract_tar "$archive" "$output_dir" "xz"
+            result=$?
+            ;;
+        gz)
+            extract_gz "$archive" "$output_dir"
+            result=$?
+            ;;
+        bz2)
+            extract_bz2 "$archive" "$output_dir"
+            result=$?
+            ;;
+        rar)
+            extract_rar "$archive" "$output_dir"
+            result=$?
+            ;;
+        7z)
+            extract_7z "$archive" "$output_dir"
+            result=$?
+            ;;
+        unknown)
+            error "Неизвестный тип архива: $archive"
+            result=1
+            ;;
+    esac
+    
+    if [[ $result -eq 0 ]]; then
+        info "Архив успешно распакован в: $output_dir"
+        echo "$output_dir"
+        return 0
+    else
+        error "Не удалось распаковать архив"
+        # Очищаем созданную директорию при ошибке
+        [[ -d "$output_dir" ]] && rm -rf "$output_dir"
+        return 1
+    fi
+}
+
+# ============================================================================
+# ФУНКЦИЯ АНАЛИЗА ПУТИ
+# ============================================================================
+
+analyze_and_extract() {
+    local path="$1"
+    local extract_dir="${2:-}"
+    
+    # Абсолютный путь
+    if [[ ! "$path" =~ ^/ ]]; then
+        path="$PWD/$path"
+    fi
+    
+    # Проверяем существование
+    if [[ ! -e "$path" ]]; then
+        error "Путь не существует: $path"
+        return 1
+    fi
+    
+    # Если это директория
+    if [[ -d "$path" ]]; then
+        info "Указана директория: $path"
+        echo "$path"
+        return 0
+    fi
+    
+    # Если это файл - проверяем архив
+    if [[ -f "$path" ]]; then
+        info "Анализирую файл: $path"
+        
+        if is_archive "$path"; then
+            info "Обнаружен архив: $(basename "$path")"
+            
+            # Спрашиваем подтверждение если не в batch режиме
+            if [[ -t 0 ]] && [[ "${BATCH_MODE:-false}" != "true" ]]; then
+                read -p "Распаковать архив? [Y/n]: " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Nn]$ ]]; then
+                    info "Распаковка отменена пользователем"
+                    echo "$path"
+                    return 0
+                fi
+            fi
+            
+            # Распаковываем
+            local extracted_dir
+            if extracted_dir=$(extract_archive "$path" "$extract_dir"); then
+                echo "$extracted_dir"
+                return 0
+            else
+                return 1
+            fi
+        else
+            info "Файл не является архивом: $path"
+            echo "$path"
+            return 0
+        fi
+    fi
+    
+    error "Неизвестный тип файла: $path"
+    return 1
+}
+
+# ============================================================================
+# ОСНОВНАЯ ФУНКЦИЯ
+# ============================================================================
+
+main() {
+    local path="${1:-}"
+    local extract_dir="${2:-}"
+    
+    # Проверка аргументов
+    if [[ -z "$path" ]]; then
+        echo "Использование: $0 <путь_к_файлу_или_архиву> [директория_распаковки]"
+        echo ""
+        echo "Примеры:"
+        echo "  $0 archive.zip           # Распаковать в текущую директорию"
+        echo "  $0 /path/to/archive.tar.gz /tmp  # Распаковать в /tmp"
+        echo "  $0 file.txt              # Вернуть путь к файлу без распаковки"
+        echo ""
+        echo "Поддерживаемые форматы: ${SUPPORTED_ARCHIVES[*]}"
+        return 1
+    fi
+    
+    # Анализируем и распаковываем если нужно
+    local result_path
+    if result_path=$(analyze_and_extract "$path" "$extract_dir"); then
+        echo "$result_path"
+        return 0
+    else
+        return 1
+    fi
+}
+
+# ============================================================================
+# ЗАПУСК СКРИПТА
+# ============================================================================
+
+main "$@"

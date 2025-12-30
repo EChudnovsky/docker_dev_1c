@@ -1,0 +1,67 @@
+#!/command/with-contenv bash
+
+: <<'DOCUMENTATION'
+Название: сli-ibsrv-start
+Назначение: Запускает автономный сервер 1C с 
+            переданным файлом конфигурации или с настройками по умолчанию.
+            При запуске создается база данных.
+
+Требования:
+  - Нет
+
+Использование:
+    #!/bin/bash
+    
+    сli-ibsrv-start
+
+Возвращаемые коды:
+  0 - успех
+  1 - ошибка операции
+
+DOCUMENTATION
+
+# Подключение общих библиотек
+source ${CLI_LIB_PATH}/lib/cli-common
+source ${CLI_LIB_PATH}/lib/cli-logger
+
+# Проверим запущенные процессы
+if $(is_ibsrv_running); then
+    exit 0
+fi
+
+# ОСНОВНАЯ ЛОГИКА
+main() {
+
+    info "Запуск автономного сервера 1С..."
+
+    # Создадим конфигурацию сервера, если ее нет
+    if [[ ! -f "${_1C_IBSRV_CONF}" ]]; then
+      cli-ibsrv-init || {
+        error "Ошибка запуска автономного сервера."
+        exit 1
+    }
+    fi
+    
+    # Создадим тестовую базу, для подключения 
+    cli-ib-create || {
+        error "Ошибка запуска автономного сервера."
+        exit 1
+    }
+    
+    ibsrv --daemon --config="${_1C_IBSRV_CONF}" --data="${_1C_IBSRV_DATA}" --log-data="${LOG_PATH_DIR}/ibsrv.log" --ssh-port=1543 || {
+
+         error "Ошибка запуска автономного сервера."
+          exit 1
+    }
+
+    if $(is_ibsrv_running); then
+      info "Автономный сервер запущен..."
+      exit 0
+    else
+      error "Не удалось запустить автономный сервер..."
+      exit 1
+    fi
+    
+}
+
+main "$@"

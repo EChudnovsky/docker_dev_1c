@@ -1,0 +1,40 @@
+#!/command/with-contenv bash
+
+if [ -z "${RESOURCE_PATH}" ]; then
+    exit 0
+fi
+
+# Подключение общих библиотек после определения всех переменных
+source ${CLI_LIB_PATH}/lib/cli-logger
+  
+#   проверим путь
+  if [[ ! -f $PROJECT_BULD_DIR/inbox ]]; then
+    mkdir -p $PROJECT_BULD_DIR/inbox
+  fi 
+    
+  # Скачиваем ресурс
+  output_file="$PROJECT_BULD_DIR/inbox/${RESOURCE_PATH##*/}"
+  cli-download "$RESOURCE_PATH" "$output_file" || {
+      error "Ошибка загрузки ресурса: $RESOURCE_PATH."
+      exit 1
+  }
+
+# Распаковывем если это архив
+cli-unpack "$output_file" "$PROJECT_BULD_DIR/inbox"
+# resualt=$(cli-unpack  "$RESOURCE_PATH" "$PROJECT_BULD_DIR/inbox" 2>&1)
+
+# Ошибка распаковки
+if [[ $? -ne 0 ]]; then
+    if [[ ! "${resualt}" =~ "Файл не является архивом" ]]; then # Файл не является архивом, выходим
+        error ${resualt}
+        exit 1
+    fi
+fi
+
+# Устанавливаем путь к файлу БД
+if [ -z "${RESOURCE_PATH}" ]; then
+    export _1C_DB_FILE_FOR_LOAD=$(find . -type f \( -name "*.dt" -o -name "*.cf" -o -name "*.cfu" \))
+    [ -z "${RESOURCE_PATH}" ] || info "Найден файл для инициализации БД : _1C_DB_FILE_FOR_LOAD: $_1C_DB_FILE_FOR_LOAD"
+fi
+
+info ${resualt}

@@ -1,0 +1,107 @@
+#!/command/with-contenv bash
+
+: <<'DOCUMENTATION'
+Название: cli-ib-create
+Назначение: Создает базу даных 1С.
+            Если "$_1C_DB_FILE_FOR_LOAD" выполняется анализ пути.
+            Если в имени cf-файла содержится протокол транспорта http://, https://, ftp://, sftp:// и т.д.
+            файл будет скачен с ресурса для локального доступа.
+            После создания базы выполняется загрузка конфигурация (если указана).
+Требования:
+  - Нет
+
+Использование:
+    #!/bin/bash
+    cli-ib-create
+
+Возвращаемые коды:
+  0 - успех
+  1 - ошибка операции
+
+DOCUMENTATION
+
+# Подключение общих библиотек
+source ${CLI_LIB_PATH}/lib/cli-logger
+source ${CLI_LIB_PATH}/lib/cli-common
+
+load_file(){
+
+    # Если указана переменная, конфигурацию необходимо предварительно скачать
+    if [ -z "${_1C_DB_FILE_FOR_LOAD}" ]; then
+        return 0
+    fi
+        
+    # Скачиваем cf-файл 
+    local output_file="$PROJECT_BULD_DIR/inbox/${_1C_DB_FILE_FOR_LOAD##*/}"
+    cli-download "$_1C_DB_FILE_FOR_LOAD" "$output_file" || {
+        error "Ошибка создания базы."
+        exit 1
+    }
+    
+    # Устанавливаем локальный путь к cf-файлу
+    export _1C_DB_FILE_FOR_LOAD=${output_file}
+    
+    # Распаковывем если это архив
+    local resualt=$(cli-unpack)
+    # Ошибка распаковки
+    if [[ $? -ne 0 ]]; then
+
+        if [[ "${resualt}" =~ "Файл не является архивом" ]]; then # Файл не является архивом, выходим
+            info ${resualt}
+            return 0
+        else
+            error ${resualt}
+            return 1        
+        fi
+    else
+        info ${resualt}
+        return 0
+    fi
+    
+}
+
+# Основная логика скрипта
+main() {
+
+    info "Создание базы данных..."
+
+    # Загрузим вшеншний файл для создания базы
+    load_file || { 
+        error "Ошибка загрузки данных: ${_1C_DB_FILE_FOR_LOAD}" 
+        exit 1
+    }
+
+    # Создаем базу
+    
+    local resualt
+    if [[ -f "$_1C_DB_FILE_FOR_LOAD" ]]; then
+        resualt=$(ibcmd infobase --config="$_1C_IBSRV_CONF" create --force --apply --load=\"${_1C_DB_FILE_FOR_LOAD}\" 2>&1 ) 
+    else
+        resualt=$(ibcmd infobase --config="$_1C_IBSRV_CONF" create --force --apply 2>&1)
+    fi
+    
+    # Проверяем результат, если база создана, тогда очистим ее или загрузку, если файл существет
+    if [[ $? -ne 0 && "$resualt" =~ "уже зарегистрирована" ]] then
+        
+        if [[ ! $(is_ibsrv_running) ]]; then
+            info "$resualt
+            Автономный сервер не запущен. Загрузка (очистка) базы не выполнялось."
+            exit 0
+        elif [[ -f "$_1C_DB_FILE_FOR_LOAD" ]]; then
+            # Загрузка конфигурации
+            info "Загрузка конфигурации..."
+            resualt=$(ibcmd infobase --config="$_1C_IBSRV_CONF" config load --force "${_1C_DB_FILE_FOR_LOAD}\"" 2>&1)
+        else
+            # Очистка информационной базы
+            info "Очистка информационной базы..."
+            resualt=$(ibcmd infobase --config="$_1C_IBSRV_CONF" clear --user=${_1C_DB_USER} --password=${_1C_DB_PWD} 2>&1)
+        fi
+    fi
+    
+    [[ $x -eq 0 ]] && info "$resualt" || error "$resualt"
+    info "Создание базы данных завершено..."
+    exit $x
+
+}
+
+main "$@"

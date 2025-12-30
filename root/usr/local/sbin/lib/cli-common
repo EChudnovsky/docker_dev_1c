@@ -1,0 +1,117 @@
+#!/command/with-contenv bash
+
+: <<'DOCUMENTATION'
+Название: cli-common
+Назначение: Библиотека общий функций
+Требования:
+  - Нет
+
+Использование:
+    #!/bin/bash
+    
+    <имя функции> [Параметры]
+
+Возвращаемые коды:
+  Нет
+  
+DOCUMENTATION
+
+# Проверяем, что скрипт не выполняется напрямую
+[[ "${BASH_SOURCE[0]}" == "${0}" ]] && {
+    echo "Это библиотека, импортируйте её: source cli-common"
+    exit 1
+}
+
+# Исключаем двойную загрузку
+if declare -f is_running_proccess > /dev/null; then
+    exit 0
+fi
+
+_PROCESS_NAME_IBSRV="ibsrv"
+
+# ОБЩИЕ ФУНКЦИИ
+
+# Функция: uuid
+# Описание: возвращает строку в формате GUID
+# Возвращает: строка GUID
+uuid() {
+    
+    C="89ab"
+    for ((N=0;N<16;++N)); do
+        B="$((RANDOM%256))"
+        case "$N" in
+            6)  printf '4%x' "$((B%16))" ;;
+            8)  printf '%c%x' "${C:$RANDOM%${#C}:1}" "$((B%16))" ;;
+
+            3|5|7|9)
+                printf '%02x-' "$B"
+            ;;
+
+            *)
+                printf '%02x' "$B"
+            ;;
+        esac
+    done
+
+    printf '\n'
+}
+
+# Функция: is_running_proccess
+# Описание: ищет запущенный процесс по переданному имени
+# Возвращает: 0 - процесс запущен, 1 - процесс не запущен
+is_running_proccess() {
+    if pgrep -x "$1" > /dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# ФУНКЦИЯ ПО РАБОТЕ С ФАЙЛАМИ
+
+# Функция: сreate_catalog_for_variable
+# Описание: проверяет заполнение переменной и создает пути по значению
+# Выбрасывает исключение, если ошибка.
+сreate_catalog_for_variable() {
+  
+  local value=${!1}
+  if [ -z "$value" ]; then
+    echo "Не установлена переменная: $1" >&2
+    exit 1
+  fi
+  if [ ! -d "$value" ]; then
+    mkdir -p "$value" || {
+        echo "Ошибка создания каталога: $value" >&2
+        exit 1
+    }
+    chmod a+rw $value
+    
+  fi
+
+}
+
+# Функция: addPATH
+# Описание: добавлем в переменную $PATH переданный путь
+# Выбрасывает исключение, если ошибка.
+add_PATH () {
+  x="$1"
+  IFS=:
+  set -- $PATH
+  IFS=
+  while test "$#" -gt 0 ; do
+    if test "$1" = "$x" ; then
+      return
+    fi
+    shift
+  done
+  PATH="${x}:$PATH"
+}
+
+# ФУНКЦИЯ ПО РАБОТЕ С IBSRV
+
+# Функция: is_running_proccess
+# Описание: ищет запущенный процесс по переданному имени
+# Возвращает: 0 - процесс запущен, 1 - процесс не запущен
+is_ibsrv_running() {
+    return $(is_running_proccess "$_PROCESS_NAME_IBSRV")
+}

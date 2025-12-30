@@ -1,95 +1,175 @@
-#!/usr/bin/with-contenv bash
+#!/command/with-contenv bash
 
-сreate_catalog_for_variable() {
-  
-  local value=${!1}
-  if [ -z "$value" ]; then
-    echo "Не установлена переменная: $1" >&2
-    exit 1
-  fi
-  if [ ! -d "$value" ]; then
-    mkdir -p "$value" || {
-        echo "Ошибка создания каталога: $value" >&2
-        exit 1
-    }
-    
-  fi
-
+str_trim_all() {
+  echo "$1" | sed -E 's/[[:space:]]+/ /g' | tr -d '\n'
 }
 
-addpath () {
-  x="$1"
-  IFS=:
-  set -- $PATH
-  IFS=
-  while test "$#" -gt 0 ; do
-    if test "$1" = "$x" ; then
-      return
-    fi
-    shift
-  done
-  PATH="${x}:$PATH"
-}
+echo "**** УСТАНОВКА ПЕРЕМЕННЫХ ****"
+# ПЕРЕМЕННЫЕ ЗАВИСЯЩИЕ ОТ ПОЛЬЗОВАТЕЛЬСКИХ УСТАНОВОК
+# Имя проекта
+export CI_PROJECT_NAME="${CI_PROJECT_NAME:-"test_project"}"
+# Директория проекта
+export CI_PROJECT_DIR="${CI_PROJECT_DIR:-"/config/1c_edt"}"
+# Директория сборки
+export PROJECT_BULD_DIR="${PROJECT_BULD_DIR:-"${CI_PROJECT_DIR}/build"}"
+# Директория логирования
+export LOG_PATH_DIR="${LOG_PATH_DIR:-"${PROJECT_BULD_DIR}/logs"}"
+# Имя файла лога сборки CI\CD
+export LOG_PATH_FILE="${LOG_PATH_FILE:-"${LOG_PATH_DIR}/build_${CI_PROJECT_NAME}.log"}"
+# Путь к каталогу проекта edt
+export EDT_PATH_PROJECT="${EDT_PATH_PROJECT:-"${CI_PROJECT_DIR}/src"}"
+# Путь к каталогу workspace edt
+export EDT_PATH_WORKSPACE="${EDT_PATH_WORKSPACE:-"${PROJECT_BULD_DIR}/workspace"}"
+# Путь к базе
+export _1C_IBSRV_CONF="${_1C_IBSRV_CONF:-"${PROJECT_BULD_DIR}/infobase/ibsrv/conf.yaml"}"
+# Путь к каталогу данных автомного сервера
+export _1C_IBSRV_DATA="${_1C_IBSRV_DATA:-"${PROJECT_BULD_DIR}/infobase/ibsrv/data"}"
 
-echo "**** CATALOGS CREATION FOR TESTING ****"
+# Подключение к базе
+export _1C_DB_PATH="${_1C_DB_PATH:-"${PROJECT_BULD_DIR}/infobase/db"}"
+# Путь к .cf-файлу, на основе которого будет создана база или выгружен из БД
+export _1C_DB_PATH_CF_SAVE="${_1C_DB_PATH_CF_SAVE:-"${PROJECT_BULD_DIR}/outbox/${CI_PROJECT_NAME}.cf"}"
 
-сreate_catalog_for_variable "EDT_PATH_WORKSPACE"
-сreate_catalog_for_variable "CI_PROJECT_DIR"
-сreate_catalog_for_variable "PROJECT_BULD_DIR"
-сreate_catalog_for_variable "PROJECT_LOG_DIR"
-сreate_catalog_for_variable "_1C_DB_PATH"
-
-echo "**** SETTINGS OF THE ENVIRONMENT ****"
-
+# ВЫЧИСЛЯЕМЫЕ ПЕРЕМЕННЫЕ
 export _1C_HOME=$(dirname "$(find "/opt/1cv8/" -name "1cv8" -type f)")
 export JAVA_HOME=$(dirname "$(find "/opt/1C/1CE/components" -name "java" -type f)")
 export EDT_HOME=$(dirname "$(find "/opt/1C/1CE/components" -name "1cedtcli" -type f)")
 export RING_HOME=$(dirname "$(find "/opt/1C/1CE/components" -name "ring" -type f)")
-
 export _1C_VERSION_FULL=$(echo $_1C_HOME | grep -oP '\d+\.\d+\.\d+\.\d+$')
 export _1C_VERSION=$(echo $_1C_VERSION_FULL | grep -oP '\d+\.\d+\.\d+')
 
-echo "SET ENVIRONMENT VARIABLES: 
-_1C_HOME=${_1C_HOME}
-_1C_VERSION=${_1C_VERSION}
-_1C_VERSION_FULL=${_1C_VERSION_FULL}
-EDT_HOME=${EDT_HOME}
-JAVA_HOME=${JAVA_HOME}
-RING_HOME=${RING_HOME}
-PATH=${PATH}
-"
+# Сохраним установленные переменные
+# Для корректного получения переменных необходимо использовать with-contenv
+# Пример скрипта:
+# 
+#!/command/with-contenv sh
+# Now has access to all container environment variables
+# env
+# 
+# Подробнее здесь: https://deepwiki.com/just-containers/s6-overlay/3.1-environment-variables
+
+/usr/bin/env | while IFS= read -r line; do
+    namefile="${line%=*}"
+    namefile="${namefile#export }"
+    namefile=$(str_trim_all $namefile)
+    value="${line##*=}"
+    value=$(str_trim_all $value)
+    if [ -f "/run/s6/container_environment/$namefile" ]; then
+      printf "${value}" > "/run/s6/container_environment/$namefile"
+    fi
+done
+
+/usr/bin/with-contenv /usr/bin/env | sed 's/^/export /g' > /etc/profile.d/env.sh
+chmod 755 "/etc/profile.d/env.sh"
+echo "source /etc/profile.d/env.sh" >> /etc/bash.bashrc
+
+# Подключим библиотеку CLI
+if [ -d \$CLI_LIB_PATH ]; then
+  for i in "\${CLI_LIB_PATH}"/*; do
+    chmod 755 "\$i"
+  done
+  unset i
+fi
+
+# Подключение общих библиотек после определения всех переменных
+source ${CLI_LIB_PATH}/lib/cli-common
+source ${CLI_LIB_PATH}/lib/cli-logger
+
+# Перед подключением библиотеки логирования файл должен существовать.
+сreate_catalog_for_variable "LOG_PATH_DIR"
+
+# Вывод в лог состояния переменных
+text_info=$(cat << INFO
+  
+  ====== ПЕРЕМЕННЫЕ СРЕДЫ, СБОРКИ И ТЕСТИРОВАНИЯ ===========
+  
+  ## ОБЩИЕ И СЛУЖЕБНЫЕ ПЕРЕМЕННЫЕ ##
+  Путь к внешнему ресурсу:        'RESOURCE_PATH': ${RESOURCE_PATH:-<Пусто>}   
+  Путь к JAVA:                    'JAVA_HOME': ${JAVA_HOME:-<Пусто>}
+  Путь к CLI библиотеке:          'CLI_LIB_PATH': ${CLI_LIB_PATH:-<Пусто>}
+  Путь к директории 
+  скриптам 1С:Элемент:            'EXECUTOR_MODULES_PATH': ${EXECUTOR_MODULES_PATH:-<Пусто>}
+  
+  ## ПЕРЕМЕННЫЕ CI\CD ##
+  Имя проекта:                    'CI_PROJECT_NAME': ${CI_PROJECT_NAME:-<Пусто>}
+  Директория проекта:             'CI_PROJECT_DIR': ${CI_PROJECT_DIR:-<Пусто>}
+  Директория сборки:              'PROJECT_BULD_DIR': ${PROJECT_BULD_DIR:-<Пусто>}  
+  
+  ## ЛОГИРОВАНИЕ ##
+  Директория логирования:         'LOG_PATH_DIR': ${LOG_PATH_DIR:-<Пусто>}
+  Имя файла логирования:  CI\CD:  'LOG_PATH_FILE': ${LOG_PATH_FILE:-<Пусто>}
+  Уровень логирования в скриптах: 'LOG_LEVEL': ${LOG_LEVEL:-<Пусто>}
+  Вывод в консоль (true|false):   'LOG_TO_CONSOLE': ${LOG_TO_CONSOLE:-<Пусто>}
+  Вывод в лог-файл (true|false):  'LOG_TO_FILE': ${LOG_TO_FILE:-<Пусто>}
+  Цветной вывод  (true|false):    'LOG_COLORIZED': ${LOG_COLORIZED:-<Пусто>}
+  
+  ## EDT ##
+  Каталог:                          'EDT_HOME': ${EDT_HOME:-<Пусто>} 
+  Каталог RING:                     'RING_HOME': ${RING_HOME:-<Пусто>}
+  Лимит памяти для запуска EDT:     'EDT_MEMORY_LIMIT': ${EDT_MEMORY_LIMIT:-<Пусто>}
+  Доп. параметры для запуска JVM:   'EDT_VMARGS': ${EDT_VMARGS:-<Пусто>}
+  Время выполнения операций (сек.): 'EDT_MAXTIMEOUT': ${EDT_MAXTIMEOUT:-<Пусто>}
+  Путь к каталогу проекта edt:      'EDT_PATH_PROJECT': ${EDT_PATH_PROJECT:-<Пусто>}
+  Путь к каталогу workspace edt:    'EDT_PATH_WORKSPACE': ${EDT_PATH_WORKSPACE:-<Пусто>}
+
+  ## ПЛАТФОРМА 1C ##
+  Каталог 1С:                       '_1C_HOME': ${_1C_HOME:-<Пусто>}
+  Версия платформы:                 '_1C_VERSION': ${_1C_VERSION:-<Пусто>}
+  Полная версия платформы:          '_1C_VERSION_FULL': ${_1C_VERSION_FULL:-<Пусто>}
+
+  ## Автономный сервер 1С ##
+  Путь к конфигурации файлу:        '_1C_IBSRV_CONF': ${_1C_IBSRV_CONF:-<Пусто>}
+  Путь к каталогу данных сервера:   '_1C_IBSRV_DATA': ${_1C_IBSRV_DATA:-<Пусто>}
+  Порт сервера:                     '_1C_IBSRV_PORT': ${_1C_IBSRV_PORT:-<Пусто>}
+  Порт отладки:                     '_1C_IBSRV_PORT_DEBUG': ${_1C_IBSRV_PORT_DEBUG:-<Пусто>}
+  Порт публикации:                  '_1C_IBSRV_PORT_HTTP': ${_1C_IBSRV_PORT_HTTP:-<Пусто>}
+
+  ## БАЗА ДАННЫХ 1С ##
+  Имя базы:                         '_1C_DB_NAME': ${_1C_DB_NAME:-<Пусто>}
+  Путь к базе:                      '_1C_DB_PATH': ${_1C_DB_PATH:-<Пусто>} 
+  Пользователь БД:                  '_1C_DB_USER': ${_1C_DB_USER:-<Пусто>}
+  Пароль пользователя БД:           '_1C_DB_PWD': ***
+  Путь к .cf-файлу для загрузки:    '_1C_DB_FILE_FOR_LOAD': ${_1C_DB_FILE_FOR_LOAD:-<Пусто>}
+  Путь к .cf-файлу для выгрузки":   '_1C_DB_PATH_CF_SAVE': ${_1C_DB_PATH_CF_SAVE:-<Пусто>}
+INFO
+)
+
+info "$text_info"
+info "Cоздание каталогов..."
+
+сreate_catalog_for_variable "EDT_PATH_WORKSPACE"
+сreate_catalog_for_variable "CI_PROJECT_DIR"
+сreate_catalog_for_variable "PROJECT_BULD_DIR"
+сreate_catalog_for_variable "_1C_DB_PATH"
+сreate_catalog_for_variable "_1C_IBSRV_DATA"
+mkdir -p "${PROJECT_BULD_DIR}/inbox"
+mkdir -p "${PROJECT_BULD_DIR}/outbox"
+info "Cоздание каталогов...Завершено"
+
+info "Cоздание ссылок на исполняемые файлы..."
 # Настройка параметров запуска edt по-умолчанию
 sed -i "s/^\(-Xmx\).*$/\1${EDT_MEMORY_LIMIT}/" "$EDT_HOME/1cedt.ini"
 
-# Создание ссылок 
-ln -s "${_1C_HOME}/1cv8" /usr/local/sbin/1cv8
-ln -s "${_1C_HOME}/ibsrv" /usr/local/sbin/ibsrv
-ln -s "${_1C_HOME}/ibcmd" /usr/local/sbin/ibcmd
+# Создание ссылок
+path_ln=/usr/local/bin 
+ln -sf "${_1C_HOME}/1cv8" ${path_ln}/1cv8
+ln -sf "${_1C_HOME}/1cv8c" ${path_ln}/1cv8c
+ln -sf "${_1C_HOME}/ibsrv" ${path_ln}/ibsrv
+ln -sf "${_1C_HOME}/ibcmd" ${path_ln}/ibcmd
+ln -sf "${RING_HOME}/ring" ${path_ln}/ring
+ln -sf "${JAVA_HOME}/java" ${path_ln}/java
+ln -sf "${EDT_HOME}/1cedtcli" ${path_ln}/1cedtcli
+ln -sf "${EDT_HOME}/1cedt" ${path_ln}/1cedt
+find /opt/1C/1CE/components -type f -name "executor" -exec ln -sf {} ${path_ln}/executor \;
+info "Cоздание ссылок на исполняемые файлы...Завершено"
 
-ln -s "${RING_HOME}/ring" /usr/local/bin/ring
-ln -s "${JAVA_HOME}/java" /usr/local/bin/java
-ln -s "${EDT_HOME}/1cedtcli" /usr/local/bin/1cedtcli
-ln -s "${EDT_HOME}/1cedt" /usr/local/bin/1cedt
+# Скачивание ресурсов указанные в переменной RESOURCE_PATH
+info "Загрузка внешних ресурсов..."
+$(dirname "$0")/loader
+info "Загрузка внешних ресурсов...Завершено"
 
-cat <<EOF >> /etc/bash.bashrc
-  # Глобальные переменные
-  export _1C_HOME="${_1C_HOME}"
-  export EDT_HOME="${EDT_HOME}"
-  export RING_HOME="${RING_HOME}"
-  export JAVA_HOME="${JAVA_HOME}"
-  export PATH=${PATH}
-  export _1C_VERSION=${_1C_VERSION}
-  export _1C_VERSION_FULL=${_1C_VERSION_FULL}
-
-  # Подключение библиотек сборок
-  if [ -d \$CLI_LIB_PATH ]; then
-    for i in "\${CLI_LIB_PATH}"/*.sh; do
-      chmod +x "\$i"
-      if [ -x "\$i" ] && [ ""\$i"" != *"test_"* ]; then
-        . "\$i"
-      fi
-    done
-    unset i
-  fi
-
-EOF
+# Выравним владельцев подчинненых файлов в родительской папке
+info "Корректировка владельцев родительской папке..."
+chown --reference=/config/ -R /config/
+chmod -R a+rw "${PROJECT_BULD_DIR}"
+info "Корректировка владельцев родительской папке...Завершено"

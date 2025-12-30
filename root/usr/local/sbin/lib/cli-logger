@@ -1,0 +1,173 @@
+#!/command/with-contenv bash
+
+: <<'DOCUMENTATION'
+Название: сli-logger
+Назначение: Логирование сообщений
+Требования:
+  - Нет
+
+Использование:
+    #!/bin/bash
+    # Импортируем библиотеку логирования
+    source ./cli-logger
+
+    # Настраиваем логирование
+    LOG_LEVEL="DEBUG"       # Доступные значения: DEBUG|INFO|WARN|ERROR. По-умолчанию: INFO
+    LOG_TO_FILE="true"      # Доступные значения true|false. По-умолчанию: true
+    LOG_TO_CONSOLE="true"   # Доступные значения true|false. По-умолчанию: true
+
+
+    # Вариант A: Ручное логирование
+    info "Запуск приложения"
+    debug "Параметры: $*"
+    warn "Это предупреждение"
+    error "Это ошибка"
+
+
+    # Вариант B: Автоматическое логирование ВСЕХ выводов
+    setup_stream_logging "STDOUT" "STDERR"
+
+    # Теперь ВСЕ команды логируются автоматически
+    echo "Это обычный вывод команды"    # Вывод информации
+    ls /несуществующий_файл             # Эта ошибка залогируется автоматически
+    info "Завершение работы"
+
+Возвращаемые коды:
+  Нет
+  
+DOCUMENTATION
+
+# Проверяем, что скрипт не выполняется напрямую
+[[ "${BASH_SOURCE[0]}" == "${0}" ]] && {
+    echo "Это библиотека, импортируйте её: source cli-logger"
+    exit 1
+}
+
+# Исключаем двойную загрузку
+if declare -f log > /dev/null; then
+    exit 0
+fi
+
+# Цвета (можно отключить для файлов)
+if [[ -t 1 ]]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    PURPLE='\033[0;35m'
+    CYAN='\033[0;36m'
+    BOLD='\033[1m'
+    NC='\033[0m' # No Color
+else
+    RED=''; GREEN=''; YELLOW=''; BLUE=''; PURPLE=''; CYAN=''; BOLD=''; NC=''
+fi
+
+# Глобальные настройки
+LOG_LEVEL="${LOG_LEVEL:-INFO}"  # DEBUG, INFO, WARN, ERROR
+LOG_PATH_FILE="${LOG_PATH_FILE:-${LOG_PATH_DIR}/build_${CI_PROJECT_NAME}.log}"
+LOG_TO_CONSOLE="${LOG_TO_CONSOLE:-true}"
+LOG_TO_FILE="${LOG_TO_FILE:-false}"
+LOG_COLORIZED="${LOG_COLORIZED:-true}"
+
+# Функция форматирования сообщения
+_format_message() {
+    local level="$1"
+    local message="$2"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')
+    local color=""
+    local level_str=""
+    
+    case "$level" in
+        DEBUG) level_str="DEBUG"; color="${PURPLE}" ;;
+        INFO)  level_str="INFO "; color="${GREEN}" ;;
+        WARN)  level_str="WARN "; color="${YELLOW}" ;;
+        ERROR) level_str="ERROR"; color="${RED}" ;;
+        *)     level_str="LOG  "; color="${NC}" ;;
+    esac
+    
+    if [[ "$LOG_COLORIZED" == "true" && -t 1 ]]; then
+        echo -e "${color}[${timestamp}] [${level_str}] ${message}${NC}"
+    else
+        echo "[${timestamp}] [${level_str}] ${message}"
+    fi
+}
+
+# Основная функция логирования
+log() {
+    local level="${1:-INFO}"
+    shift
+    local message="$*"
+    
+    # Проверка уровня логирования
+    declare -A level_map=([DEBUG]=0 [INFO]=1 [WARN]=2 [ERROR]=3)
+    local current_level="${level_map[$LOG_LEVEL]:-1}"
+    local msg_level="${level_map[$level]:-1}"
+    
+    [[ $msg_level -lt $current_level ]] && return 0
+    
+    # Форматируем и выводим
+    local formatted_msg=$(_format_message "$level" "$message")
+    
+    # В консоль
+    if [[ "$LOG_TO_CONSOLE" == "true" ]]; then
+        if [[ "$level" == "ERROR" ]]; then
+            echo -e "$formatted_msg" >&2
+        else
+            echo -e "$formatted_msg"
+        fi
+    fi
+    
+    # В файл (без цветов)
+    if [[ "$LOG_TO_FILE" == "true" && -n "$LOG_PATH_FILE" && "$LOG_PATH_FILE" != "/dev/null" ]]; then
+        LOG_COLORIZED=false _format_message "$level" "$message" >> "$LOG_PATH_FILE"
+    fi
+}
+
+# Функции-обертки для разных уровней
+debug() { log DEBUG "$@"; }
+info()  { log INFO "$@"; }
+warn()  { log WARN "$@"; }
+error() { log ERROR "$@"; }
+
+# Функция для настройки перенаправления потоков
+setup_stream_logging() {
+    local prefix_stdout="${1:-INFO}"
+    local prefix_stderr="${2:-ERROR}"
+    
+    # Создаем именованные каналы
+    local stdout_pipe; stdout_pipe=$(mktemp -u)
+    local stderr_pipe; stderr_pipe=$(mktemp -u)
+    mkfifo "$stdout_pipe" "$stderr_pipe" 2>/dev/null || {
+        error "Не удалось создать каналы"
+        return 1
+    }
+    
+    # Функции обработки
+    _process_stdout() {
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && log "$prefix_stdout" "$line"
+        done < "$stdout_pipe"
+    }
+    
+    _process_stderr() {
+        while IFS= read -r line; do
+            [[ -n "$line" ]] && log "$prefix_stderr" "$line"
+        done < "$stderr_pipe"
+    }
+    
+    # Запускаем обработчики
+    _process_stdout &
+    _process_stderr &
+    
+    # Перенаправляем потоки
+    exec 1> "$stdout_pipe"
+    exec 2> "$stderr_pipe"
+    
+    # Очистка при выходе
+    _cleanup_pipes() {
+        rm -f "$stdout_pipe" "$stderr_pipe" 2>/dev/null
+    }
+    trap _cleanup_pipes EXIT
+    
+    info "Логирование потоков настроено (stdout->$prefix_stdout, stderr->$prefix_stderr)"
+}

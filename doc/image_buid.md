@@ -12,6 +12,7 @@
 
 * [1C:Enterprise Development Tools](https://releases.1c.ru/project/DevelopmentTools10)
 * [Технологическая платформа 1С:Предприятия для Linux ](https://releases.1c.ru/project/Platform83)
+* [1С:Предприятие.Элемент Скрипт](https://releases.1c.ru/project/Script)
 
 После скачивания файлов их необходимо разместить на одном из ресурсов доступных docker при сборке:
 * локальный каталог расположения файл DockerDockerfile
@@ -19,9 +20,22 @@
 
 ### Сборка
 
-При сборке образа можно использовать параметризованные аргументы для указания путей расположения инсталяционных файлов.
+При сборке образа можно использовать параметризованные аргументы для указания путей расположения инсталяционных файлов:
+* PATH_INSTALL_EDT
+* PATH_INSTALL_1C
+* PATH_INSTALL_EXECUTOR
 
 В примере в качестве путей к файлам используется адрес web-сервера, как источник файлов.
+
+Команда сборки выглядит так:
+
+```bash
+
+docker build -t docker_dev_1c_ex:1.0 .
+
+```
+
+или с переопределением инсталяционных файлов с использованием параметра *--build-arg*: 
 
 ```bash
 
@@ -29,9 +43,11 @@ docker build \
     -t docker_dev_1c:1.0 \
     --build-arg PATH_INSTALL_EDT="http://localhost:8090/1c_edt_distr_offline_2025.1.4_15_linux_x86_64.tar.gz" \
     --build-arg PATH_INSTALL_1C="http://localhost:8090/server64_8_3_24_1819.zip" \
-    .
+    --build-arg PATH_INSTALL_EXECUTOR="http://localhost:8090/script_x_linux_9.0.0-2.zip" \
+    -t docker_dev_1c_ex:1.0 .
 
 ```
+
 > **Примечание:**
 > Команда сборки запускается в каталоге с файлам Dockerfile.
 > Если параметры --build-arg PATH_INSTALL_EDT будут пропущены, пути файлов будут взяты по-умолчанию из Dockerfile-файла.
